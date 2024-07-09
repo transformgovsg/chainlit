@@ -526,6 +526,7 @@ class AWSCognitoOAuthProvider(OAuthProvider):
                 self.token_url,
                 data=payload,
             )
+            print(f"Debug Token Response: {response.json()}")
             response.raise_for_status()
             json = response.json()
 
