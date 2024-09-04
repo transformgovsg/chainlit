@@ -6,9 +6,10 @@ import shutil
 import urllib.parse
 from typing import Any, Optional, Union
 
-from chainlit.auth_ext import jwt_blacklist
+from chainlit.auth_ext import jwt_blacklist, users_jwt_cache, remove_from_cache
 from chainlit.oauth_providers import get_oauth_provider
 from chainlit.secret import random_secret
+
 
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
@@ -382,6 +383,9 @@ async def logout(request: Request, response: Response):
 
     if auth_header:
         _, token = auth_header.split()
+        # when user logs out, we need to remove the token from cache to invalidate it
+        user = await get_current_user(token=token)
+        remove_from_cache(users_jwt_cache, user.identifier)
         jwt_blacklist[token] = True
 
     if config.code.on_logout:
@@ -521,7 +525,11 @@ async def oauth_callback(
             detail="Unauthorized",
         )
 
-    access_token = create_jwt(user)
+    # check if user email already has a valid jwt
+    access_token = users_jwt_cache.get(user.identifier)
+    if access_token is None:
+        access_token = create_jwt(user)
+        users_jwt_cache[user.identifier] = access_token
 
     if data_layer := get_data_layer():
         try:
