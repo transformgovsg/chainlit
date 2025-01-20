@@ -385,19 +385,32 @@ async def logout(request: Request, response: Response):
 
     if auth_header:
         _, token = auth_header.split()
-        user_data = jwt.decode(
-            token,
-            get_jwt_secret(),
-            algorithms=["HS256"],
-            options={"verify_signature": True},
-        )
-        email = user_data.get("identifier")
-        if email:
-            # invalidate user session by removing it from cache
-            del jwt_session_tokens[email]
+        try:
+            # Decode the token with signature and expiration verification
+            user_data = jwt.decode(
+                token,
+                get_jwt_secret(),
+                algorithms=["HS256"],
+                options={"verify_exp": True}  # Verify expiration
+            )
+            email = user_data.get("identifier")
+            if email and jwt_session_tokens.get(email):
+                # Invalidate user session by removing it from cache
+                del jwt_session_tokens[email]
+
+        except jwt.ExpiredSignatureError:
+            # Token has expired; log the user out but don't try to delete the session
+            return {"success": True, "message": "Token expired, logged out successfully."}
+        except jwt.InvalidTokenError:
+            # Handle invalid token error including invalid signature
+            return {"success": False, "message": "Invalid token."}
+        except jwt.InvalidSignatureError:
+            # Specific handling for invalid signature
+            return {"success": False, "message": "Invalid signature."}
 
     if config.code.on_logout:
         return await config.code.on_logout(request, response)
+
     return {"success": True}
 
 
